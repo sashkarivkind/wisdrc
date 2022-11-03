@@ -10,14 +10,18 @@ def parse_commandline():
     parser.add_argument('--run_index', default=10, type=int, help='run_index')
     parser.add_argument('--verbose', default=2, type=int, help='run_index')
 
+    parser.add_argument('--student_args', default=None, type=str, help='(auxillary) filename of pickle file with student arguments')
+
     parser.add_argument('--n_classes', default=10, type=int, help='classes')
 
     parser.add_argument('--testmode', dest='testmode', action='store_true')
     parser.add_argument('--no-testmode', dest='testmode', action='store_false')
 
+    parser.add_argument('--batch_size', default=32, type=int, help='batch size')
     ### student parameters
 
-    parser.add_argument('--stu_steps_per_epoch', default=1000, type=int, help='batches per epoch')
+    parser.add_argument('--stu_steps_per_epoch', default=1000, type=int, help='batches per epoch, student pre-training')
+    parser.add_argument('--fine_tuning_steps_per_epoch', default=1000, type=int, help='batches per epoch, fine tuning')
     parser.add_argument('--epochs', default=1, type=int, help='num training epochs')
     parser.add_argument('--int_epochs', default=1, type=int, help='num internal training epochs')
     parser.add_argument('--decoder_epochs', default=40, type=int, help='num internal training epochs')
@@ -38,6 +42,8 @@ def parse_commandline():
     parser.add_argument('--student_nl', default='relu', type=str, help='non linearity')
     parser.add_argument('--dropout', default=0.2, type=float, help='dropout1')
     parser.add_argument('--rnn_dropout', default=0.0, type=float, help='dropout1')
+    parser.add_argument('--teacher_net_initial_weight', default=0.9, type=float, help='teacher_net_initial_weight')
+
     parser.add_argument('--pretrained_student_path', default=None, type=str, help='pretrained student, works only with student3')
     parser.add_argument('--pretrained_student_model', default=None, type=str, help='pretrained student model')
     parser.add_argument('--pretrained_decoder_path', default=None, type=str, help='pretrained decoder, UNDER CONSTRUCTION')
@@ -68,6 +74,11 @@ def parse_commandline():
 
     parser.add_argument('--val_set_mult', default=5, type=int, help='repetitions of validation dataset to reduce trajectory noise')
 
+    parser.add_argument('--use_teacher_net_at_low_res', dest='use_teacher_net_at_low_res' , action='store_true')
+    parser.add_argument('--no-use_teacher_net_at_low_res', dest='use_teacher_net_at_low_res', action='store_false')
+
+    parser.add_argument('--teacher_only_at_low_res', dest='teacher_only_at_low_res', action='store_true')
+    parser.add_argument('--no-teacher_only_at_low_res', dest='teacher_only_at_low_res', action='store_false')
 
     ### syclop parameters
     parser.add_argument('--trajectory_index', default=0, type=int, help='trajectory index - set to 0 because we use multiple trajectories')
@@ -195,7 +206,10 @@ def parse_commandline():
                         enable_random_gains = True,
                         enforce_zero_initial_offset_fea=False,
                         enforce_zero_initial_offset_cls=False,
-                        evaluate_final_model = False
+                        evaluate_final_model = False,
+                        use_teacher_net_at_low_res = False,
+                        teacher_only_at_low_res = False,
+
         )
 
     config = parser.parse_args()

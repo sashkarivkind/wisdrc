@@ -8,13 +8,13 @@ import gc
 import numpy as np
 import tensorflow as tf
 from tensorflow import keras
-import pandas as pd
 import time
 import pickle
 from models.student_models import  student3
 
 from utils.split_keras_model import split_model
 from utils.imagenet_dataset import get_dataset
+from utils.saving_utils import mkdir_if_needed
 from parse_commandline import parse_commandline
 
 print(os.getcwd() + '/')
@@ -100,7 +100,7 @@ if True:
     print('making feature data')
     intermediate_layer_model = fe_model
     decoder = be_model if parameters['pretrained_decoder_path'] is None else keras.models.load_model(parameters['pretrained_decoder_path'])
-    batch_size = 32
+    batch_size = parameters['batch_size']
     start = 0
     end = batch_size
     train_data = []
@@ -120,14 +120,30 @@ if True:
     verbose =parameters['verbose']
     evaluate_prediction_size = 150
 
-    save_model_path = save_path + 'saved_models/{}_feature/'.format(this_run_name)
-    checkpoint_filepath = save_model_path + '/{}_feature_net_ckpt'.format(this_run_name)
+    save_model_path = os.path.join(save_path,'saved_models',this_run_name)
+    student_parameters_path = os.path.join(save_model_path,'student_parameters')
+    student_checkpoint_path = os.path.join(save_model_path,'student_checkpoint')
+    fine_tuning_checkpoint_path = os.path.join(save_model_path,'fine_tuning_checkpoint')
+    final_weights_path = os.path.join(save_model_path,'final_weights')
+    mkdir_if_needed(save_model_path)
+    mkdir_if_needed(student_parameters_path)
+    mkdir_if_needed(student_checkpoint_path)
+    mkdir_if_needed(fine_tuning_checkpoint_path)
+    student_checkpoint_filename = os.path.join(student_checkpoint_path,'student_checkpoint')
+    fine_tuning_checkpoint_filename = os.path.join(fine_tuning_checkpoint_path,'fine_tuning_checkpoint')
 
-    model_checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(
-        filepath=checkpoint_filepath,
+    student_checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(
+        filepath=student_checkpoint_filename,
         save_weights_only=True,
         mode='min',
         save_best_only=True)
+
+    fine_tuning_checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(
+        filepath=fine_tuning_checkpoint_filename,
+        save_weights_only=True,
+        mode='min',
+        save_best_only=True)
+
     lr_reducer = keras.callbacks.ReduceLROnPlateau(
                                                    monitor='val_loss',
                                                    factor=np.sqrt(0.1),
@@ -144,38 +160,6 @@ if True:
                                                   baseline=None,
                                                   restore_best_weights=True
                                                   )
-
-
-    def save_model(net,path,parameters,checkpoint = True):
-        home_folder = path + '{}_saved_models/'.format(this_run_name)
-        if not os.path.exists(home_folder):
-            os.mkdir(home_folder)
-        if checkpoint:
-            child_folder = home_folder + 'checkpoint/'
-        else:
-            child_folder = home_folder + 'end_of_run_model/'
-        if not os.path.exists(child_folder):
-            os.mkdir(child_folder)
-        
-        #Saving using net.save method
-        model_save_path = child_folder + '{}_keras_save'.format(this_run_name)
-        #os.mkdir(model_save_path)
-        #net.save(model_save_path)
-        #Saving weights as numpy array
-        numpy_weights_path = child_folder + '{}_numpy_weights/'.format(this_run_name)
-        if not os.path.exists(numpy_weights_path):
-            os.mkdir(numpy_weights_path)
-        all_weights = net.get_weights()
-        with open(numpy_weights_path + 'numpy_weights_{}'.format(this_run_name), 'wb') as file_pi:
-            pickle.dump(all_weights, file_pi)
-        #LOAD WITH - pickle.load - and load manualy to model.get_layer.set_weights()
-
-        #save weights with keras
-        keras_weights_path = child_folder + '{}_keras_weights/'.format(this_run_name)
-        if not os.path.exists(keras_weights_path):
-            os.mkdir(keras_weights_path)
-        net.save_weights(keras_weights_path + 'keras_weights_{}'.format(this_run_name))
-        #LOADING WITH - load_status = sequential_model.load_weights("ckpt")
 
     def dummy_metric(y_true, y_pred):
         return 1
@@ -222,21 +206,26 @@ drc_fe_args = dict(sample = parameters['n_samples'],
                       channels=3 if parameters['rggb_ext_type']==0 else 4,
                     updwn=1 if parameters['rggb_ext_type']==0 else 2,
                     kernel_size=parameters['kernel_size'],
-                    custom_metrics=[],#[debug_metric,debug_metric2,debug_metric3,debug_metric4,debug_metric41,debug_metric42,debug_metric43],
+                    custom_metrics=[],
+                   teacher_only_mode=parameters['teacher_only_at_low_res'],
+                    teacher_net_initial_weight = parameters['teacher_net_initial_weight']
+#[debug_metric,debug_metric2,debug_metric3,debug_metric4,debug_metric41,debug_metric42,debug_metric43],
                       #only used for control net 210 (as of Nov.11)
                       )
 print(drc_fe_args)
-with open('last_run_student_args.pkl','wb') as f:
+with open(os.path.join(student_parameters_path,'student_args.pkl'),'wb') as f:
     pickle.dump(drc_fe_args,f)
 
-student = student_fun(**drc_fe_args)
+student = student_fun(**drc_fe_args,
+                      teacher_net= fe_model if parameters['use_teacher_net_at_low_res'] else None
+                      #teacher_net was not passed in the main dictionary of arguments.
+                      # Because it is not pickable and probably not savable
+                      )
 student.summary()
 
 train_accur = []
 test_accur = []
 # generator parameters:
-
-BATCH_SIZE=32
 
 ctrl_mode = parameters['student_version'] > 100
 position_dim = (parameters['max_length'],parameters['res'],parameters['res'],2) if  parameters['broadcast']==1 else (parameters['n_samples'],2)
@@ -271,18 +260,18 @@ generator_params = args_to_dict( n_steps=parameters['n_samples'],
 
 print('preparing generators')
 
-val_generator_baseline = get_dataset(parameters['dataset_dir'], 'validation', BATCH_SIZE, preprocessing=parameters['preprocessing'])
+val_generator_baseline = get_dataset(parameters['dataset_dir'], 'validation', batch_size, preprocessing=parameters['preprocessing'])
 
 # generator for the feature learning
-train_generator_features =  get_dataset(parameters['dataset_dir'], 'train', BATCH_SIZE, mode='low_res_features',centered_offsets=parameters['centered_offsets'],
+train_generator_features =  get_dataset(parameters['dataset_dir'], 'train', batch_size, mode='low_res_features',centered_offsets=parameters['centered_offsets'],
                                         enforce_zero_initial_offset=parameters['enforce_zero_initial_offset_fea'], **generator_params)
 
-val_generator_features = get_dataset(parameters['dataset_dir'], 'validation', BATCH_SIZE, mode='low_res_features',centered_offsets=parameters['centered_offsets'],
+val_generator_features = get_dataset(parameters['dataset_dir'], 'validation', batch_size, mode='low_res_features',centered_offsets=parameters['centered_offsets'],
                                         enforce_zero_initial_offset=parameters['enforce_zero_initial_offset_fea'], **generator_params)
 # generator for  images
-train_generator_classifier = get_dataset(parameters['dataset_dir'], 'train', BATCH_SIZE, mode='low_res_with_labels',centered_offsets=False,
+train_generator_classifier = get_dataset(parameters['dataset_dir'], 'train', batch_size, mode='low_res_with_labels',centered_offsets=False,
                                         enforce_zero_initial_offset=parameters['enforce_zero_initial_offset_cls'], **generator_params)
-val_generator_classifier = get_dataset(parameters['dataset_dir'], 'validation', BATCH_SIZE, mode='low_res_with_labels',centered_offsets=False,
+val_generator_classifier = get_dataset(parameters['dataset_dir'], 'validation', batch_size, mode='low_res_with_labels',centered_offsets=False,
                                         enforce_zero_initial_offset=parameters['enforce_zero_initial_offset_cls'], **generator_params)
 
 gc.collect()
@@ -302,12 +291,11 @@ if True:
                                         validation_data=val_generator_features,
                                         validation_steps=1000,#50000 // batch_size,
                                         verbose = verbose,
-                                        callbacks=[model_checkpoint_callback,lr_reducer,early_stopper],
+                                        callbacks=[student_checkpoint_callback,lr_reducer,early_stopper],
                                         use_multiprocessing=False) #checkpoints won't really work
 
         train_accur = np.array(student_history.history['mean_squared_error']).flatten()
         test_accur = np.array(student_history.history['val_mean_squared_error']).flatten()
-        save_model(student, save_model_path, parameters, checkpoint = False)
 
 ############################# The Student learnt the Features!! #################################################
 ####################### Now Let's see how good it is in classification ##########################################
@@ -368,20 +356,17 @@ decoder_history = fro_student_and_decoder.fit(train_generator_classifier,
                                               epochs = parameters['decoder_epochs'] if not TESTMODE else 1,
                                               validation_data = val_generator_classifier,
                                               verbose = verbose,
-                                              callbacks=[lr_reducer,early_stopper],
-                                              steps_per_epoch=1000,  # 1281167 // batch_size,
+                                              callbacks=[fine_tuning_checkpoint_callback,lr_reducer,early_stopper],
+                                              steps_per_epoch=parameters['fine_tuning_steps_per_epoch'],  # 1281167 // batch_size,
                                               validation_steps=1000,  # 50000 // batch_size,
                                               workers=8, use_multiprocessing=True)
 
-home_folder = save_model_path + '{}_saved_models/'.format(this_run_name)
-# decoder.save(home_folder +'decoder_trained_model') #todo - ensure that weights were updated
 decoder_post_training = fro_student_and_decoder.layers[-1]
-decoder_post_training.save(home_folder +'decoder_trained_model_fix0')
+decoder_post_training.save(os.path.join(final_weights_path,'decoder_final_model'))
 
-if parameters['fine_tune_student']:
-    student.save(home_folder +'student_fine_tuned_model')
-    fe_post_training = fro_student_and_decoder.layers[-2]
-    fe_post_training.save(home_folder +'fe_fine_tuned_model_fix0')
+# if parameters['fine_tune_student']:
+fe_post_training = fro_student_and_decoder.layers[-2]
+fe_post_training.save_weights(os.path.join(final_weights_path,'fe_final_weights','fe_final_weights'))
 
 
 if parameters['evaluate_final_model']:

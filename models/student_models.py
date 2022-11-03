@@ -9,6 +9,7 @@ pos_det101 - position detector model
 import numpy as np
 import tensorflow as tf
 from tensorflow import keras
+from utils.image_utils import upsample_rggb
 
 def student3(sample = 10, res = 8, activation = 'tanh', dropout = 0.0, rnn_dropout = 0.0, upsample = 0,
              num_feature = 1, layer_norm = False ,batch_norm = False, n_layers=3, conv_rnn_type='lstm',block_size = 1,
@@ -25,6 +26,9 @@ def student3(sample = 10, res = 8, activation = 'tanh', dropout = 0.0, rnn_dropo
              rggb_ext_type=1,
             expanded_inputB=True,
              custom_metrics=[],
+             teacher_net = None,
+             teacher_only_mode = False,
+            teacher_net_initial_weight = 0.9,
              **kwargs):
     #TO DO add option for different block sizes in every convcnn
     #TO DO add skip connections in the block
@@ -34,6 +38,9 @@ def student3(sample = 10, res = 8, activation = 'tanh', dropout = 0.0, rnn_dropo
     if time_pool == '0':
         time_pool = 0
     inputA = keras.layers.Input(shape=(sample, res//updwn,res//updwn,channels))
+    if teacher_net is not None:
+        teacher_input_at_low_res = upsample_rggb(tf.math.reduce_mean(inputA,axis=1))
+        teacher_out_at_low_res = teacher_net(teacher_input_at_low_res)
     if add_coordinates and coordinate_mode==1:
         if expanded_inputB:
             inputB = keras.layers.Input(shape=(sample,res,res,2))
@@ -136,10 +143,19 @@ def student3(sample = 10, res = 8, activation = 'tanh', dropout = 0.0, rnn_dropo
         x = keras.layers.UpSampling2D(size=(updwn, updwn))(x)
     if rggb_ext_type == 3:
         x = keras.layers.Conv2DTranspose(64, (4, 4), strides=(2, 2), padding="same")(x)
+
     if layer_norm:
         x = keras.layers.LayerNormalization(axis=3)(x)
     if batch_norm:
         x = keras.layers.BatchNormalization()(x)
+
+    if teacher_net is not None:
+        if not teacher_only_mode:
+            c1 = tf.Variable(1.-teacher_net_initial_weight)
+            c2 = tf.Variable(teacher_net_initial_weight)
+            x = c1*x + c2*teacher_out_at_low_res
+        else:
+            x = teacher_out_at_low_res
 
     print(x.shape)
     if enable_inputB:
