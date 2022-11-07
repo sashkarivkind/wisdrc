@@ -208,7 +208,8 @@ drc_fe_args = dict(sample = parameters['n_samples'],
                     kernel_size=parameters['kernel_size'],
                     custom_metrics=[],
                    teacher_only_mode=parameters['teacher_only_at_low_res'],
-                    teacher_net_initial_weight = parameters['teacher_net_initial_weight']
+                    teacher_net_initial_weight = parameters['teacher_net_initial_weight'],
+                    teacher_preprsocessing=parameters['preprocessing']
 #[debug_metric,debug_metric2,debug_metric3,debug_metric4,debug_metric41,debug_metric42,debug_metric43],
                       #only used for control net 210 (as of Nov.11)
                       )

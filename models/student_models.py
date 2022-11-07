@@ -9,7 +9,7 @@ pos_det101 - position detector model
 import numpy as np
 import tensorflow as tf
 from tensorflow import keras
-from utils.image_utils import upsample_rggb
+from utils.image_utils import upsample_rggb, upsample_and_reprocess
 
 def student3(sample = 10, res = 8, activation = 'tanh', dropout = 0.0, rnn_dropout = 0.0, upsample = 0,
              num_feature = 1, layer_norm = False ,batch_norm = False, n_layers=3, conv_rnn_type='lstm',block_size = 1,
@@ -29,6 +29,7 @@ def student3(sample = 10, res = 8, activation = 'tanh', dropout = 0.0, rnn_dropo
              teacher_net = None,
              teacher_only_mode = False,
             teacher_net_initial_weight = 0.9,
+            teacher_preprsocessing = None,
              **kwargs):
     #TO DO add option for different block sizes in every convcnn
     #TO DO add skip connections in the block
@@ -38,9 +39,17 @@ def student3(sample = 10, res = 8, activation = 'tanh', dropout = 0.0, rnn_dropo
     if time_pool == '0':
         time_pool = 0
     inputA = keras.layers.Input(shape=(sample, res//updwn,res//updwn,channels))
+
+
     if teacher_net is not None:
-        teacher_input_at_low_res = upsample_rggb(tf.math.reduce_mean(inputA,axis=1))
+        teacher_net.trainable = False
+        teacher_input_at_low_res = tf.math.reduce_mean(inputA, axis=1)
+        if rggb_ext_type > 0:
+            teacher_input_at_low_res = upsample_rggb(teacher_input_at_low_res)
+        else:
+            teacher_input_at_low_res = upsample_and_reprocess(teacher_input_at_low_res, preprocessing=teacher_preprsocessing)
         teacher_out_at_low_res = teacher_net(teacher_input_at_low_res)
+
     if add_coordinates and coordinate_mode==1:
         if expanded_inputB:
             inputB = keras.layers.Input(shape=(sample,res,res,2))
@@ -142,7 +151,7 @@ def student3(sample = 10, res = 8, activation = 'tanh', dropout = 0.0, rnn_dropo
     if rggb_ext_type == 2:
         x = keras.layers.UpSampling2D(size=(updwn, updwn))(x)
     if rggb_ext_type == 3:
-        x = keras.layers.Conv2DTranspose(64, (4, 4), strides=(2, 2), padding="same")(x)
+        x = keras.layers.Conv2DTranspose(num_feature, (4, 4), strides=(2, 2), padding="same")(x)
 
     if layer_norm:
         x = keras.layers.LayerNormalization(axis=3)(x)

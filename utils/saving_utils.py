@@ -11,24 +11,6 @@ def mkdir_if_needed(folder):
     if not os.path.exists(folder):
         os.mkdir(folder)
 
-def save_model_old(net, path, parameters, checkpoint=True):
-    home_folder = path + '{}_saved_models/'.format(this_run_name)
-    if not os.path.exists(home_folder):
-        os.mkdir(home_folder)
-    if checkpoint:
-        child_folder = home_folder + 'checkpoint/'
-    else:
-        child_folder = home_folder + 'end_of_run_model/'
-    if not os.path.exists(child_folder):
-        os.mkdir(child_folder)
-
-    # save weights with keras
-    keras_weights_path = child_folder + '{}_keras_weights/'.format(this_run_name)
-    if not os.path.exists(keras_weights_path):
-        os.mkdir(keras_weights_path)
-    net.save_weights(keras_weights_path + 'keras_weights_{}'.format(this_run_name))
-    # LOADING WITH - load_status = sequential_model.load_weights("ckpt")
-
 """
 legacy version:
 """
