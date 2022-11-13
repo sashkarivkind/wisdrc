@@ -1,6 +1,6 @@
 import argparse
 
-def parse_commandline():
+def parse_commandline(return_parser=False):
     parser = argparse.ArgumentParser()
 
     #general parameters
@@ -211,11 +211,12 @@ def parse_commandline():
                         teacher_only_at_low_res = False,
 
         )
-
-    config = parser.parse_args()
-    config = vars(config)
-
-    return config
+    if return_parser:
+        return parser
+    else:
+        config = parser.parse_args()
+        config = vars(config)
+        return config
 
 #bsub -q gpu-long -app nvidia-gpu -env LSB_CONTAINER_IMAGE=nvcr.io/nvidia/tensorflow:21.11-tf2-py3 -gpu num=2:j_exclusive=yes -R "affinity[thread*4] select[mem>132384] rusage[mem=132384]"  -R "select[hname!=dgxws01]"    -R "select[hname!=dgxws02]"    -R "select[hname!=agn04]" -R "select[hname!=agn05]"   -R "select[hname!=hgn02]"     -R "select[hname!=hgn03]"  -R "select[hname!=hgn07]"    -R "select[hname!=hgn08]"   -R "select[hname!=hgn09]"    -R "select[hname!=hgn10]"    -R "select[hname!=hgn11]"     -R "select[hname!=hgn12]" -o out1Imgnet.%J -e err1Imgnet.%J     python full_learning_imagenet303.py --student_nl relu --dropout 0.0 --rnn_dropout 0.0 --conv_rnn_type lstm --n_samples 5  --max_length 5   --epochs 5 --int_epochs 0 --student_block_size 5 --time_pool average_pool --student_version 3 --resnet_mode --decoder_optimizer SGD --val_set_mult 1 --res 56 --verbose 2 --broadcast 0 --dataset_dir /shareDB/imagenet201/5.0.0/ --centered_offsets --amp 12 --rggb_ext_type 3 --kernel_size 3 --stu_steps_per_epoch 10000 --pretrained_student_path saved_models/noname_j451069_t1655727450_feature/noname_j451069_t1655727450_feature_net_ckpt
 # -R "select[hname!=hgn07]"    -R "select[hname!=hgn08]"   -R "select[hname!=hgn09]"    -R "select[hname!=hgn10]"    -R "select[hname!=hgn11]"     -R "select[hname!=hgn12]" -o out1Imgnet.%J -e err1Imgnet.%J     python full_learning_imagenet303.py --student_nl relu --dropout 0.0 --rnn_dropout 0.0 --conv_rnn_type lstm --n_samples 5  --max_length 5   --epochs 5 --int_epochs 0 --student_block_size 5 --time_pool average_pool --student_version 3 --resnet_mode --decoder_optimizer SGD --val_set_mult 1 --res 56 --verbose 2 --broadcast 0 --dataset_dir /shareDB/imagenet201/5.0.0/ --centered_offsets --amp 12 --rggb_ext_type 3 --kernel_size 3 --stu_steps_per_epoch 1000

@@ -662,28 +662,6 @@ def preprocess_for_eval_n_steps(image,
     else:
         low_res_frames, high_res_image = _central_crop_with_offsets(image, high_res, low_res,offsets, n_steps,**kwargs)
 
-    # high_res_image.set_shape([high_res, high_res,3])
-    # low_res_frames.set_shape([n_steps,low_res, low_res, 3])
-
-    #if add_image_summaries:
-    #  tf.summary.image('validation_image', tf.expand_dims(image, 0))
-    # def rescale(x, enforce_def=False):
-    #     preprocessing = 'default'
-    #     if 'preprocessing' in kwargs and not enforce_def:
-    #         preprocessing = kwargs['preprocessing']
-    #     if preprocessing == 'keras_resnet50':
-    #         x = tf.cast(256.*x, tf.float32)
-    #         x = tf.keras.applications.resnet50.preprocess_input(x)
-    #     if preprocessing == 'keras_mobilenet_v2':
-    #         x = tf.cast(x * (256.), tf.float32)
-    #         x = tf.keras.applications.mobilenet_v2.preprocess_input(x)
-    #     else:
-    #         x = tf.subtract(x, 0.5)
-    #         x = tf.multiply(x, 2.0)
-    #         print(preprocessing)
-    #     return x
-
-    # return rescale(low_res_frames, enforce_def=True),rescale(high_res_image)
     offsets_out = offsets
     if relative_to_initial_offset:
             offsets_out = offsets - offsets[0]

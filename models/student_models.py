@@ -45,7 +45,7 @@ def student3(sample = 10, res = 8, activation = 'tanh', dropout = 0.0, rnn_dropo
         teacher_net.trainable = False
         teacher_input_at_low_res = tf.math.reduce_mean(inputA, axis=1)
         if rggb_ext_type > 0:
-            teacher_input_at_low_res = upsample_rggb(teacher_input_at_low_res)
+            teacher_input_at_low_res = upsample_rggb(teacher_input_at_low_res,preprocessing=teacher_preprsocessing)
         else:
             teacher_input_at_low_res = upsample_and_reprocess(teacher_input_at_low_res, preprocessing=teacher_preprsocessing)
         teacher_out_at_low_res = teacher_net(teacher_input_at_low_res)
