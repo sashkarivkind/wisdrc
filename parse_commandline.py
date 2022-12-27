@@ -25,7 +25,7 @@ def parse_commandline(return_parser=False):
     parser.add_argument('--epochs', default=1, type=int, help='num training epochs')
     parser.add_argument('--int_epochs', default=1, type=int, help='num internal training epochs')
     parser.add_argument('--decoder_epochs', default=40, type=int, help='num internal training epochs')
-    parser.add_argument('--num_feature', default=64, type=int, help='legacy to be discarded')
+    parser.add_argument('--num_features', default=64, type=int, help='number of features at the DRC interface')
     parser.add_argument('--rnn_layer1', default=32, type=int, help='legacy to be discarded')
     parser.add_argument('--rnn_layer2', default=64, type=int, help='legacy to be discarded')
     parser.add_argument('--time_pool', default=0, help='time dimension pooling to use - max_pool, average_pool, 0')
@@ -43,6 +43,7 @@ def parse_commandline(return_parser=False):
     parser.add_argument('--dropout', default=0.2, type=float, help='dropout1')
     parser.add_argument('--rnn_dropout', default=0.0, type=float, help='dropout1')
     parser.add_argument('--teacher_net_initial_weight', default=0.9, type=float, help='teacher_net_initial_weight')
+    parser.add_argument('--reference_feature_stats', default=None, type=str, help='pickle file with reference feature statistics')
 
     parser.add_argument('--pretrained_student_path', default=None, type=str, help='pretrained student, works only with student3')
     parser.add_argument('--pretrained_student_model', default=None, type=str, help='pretrained student model')

@@ -12,7 +12,7 @@ from tensorflow import keras
 from utils.image_utils import upsample_rggb, upsample_and_reprocess
 
 def student3(sample = 10, res = 8, activation = 'tanh', dropout = 0.0, rnn_dropout = 0.0, upsample = 0,
-             num_feature = 1, layer_norm = False ,batch_norm = False, n_layers=3, conv_rnn_type='lstm',block_size = 1,
+             num_features = 1, layer_norm = False ,batch_norm = False, n_layers=3, conv_rnn_type='lstm',block_size = 1,
              add_coordinates = False, time_pool = False, coordinate_mode=1, attention_net_size=64, attention_net_depth=1,
              rnn_layer1=32,
              rnn_layer2=64,
@@ -86,7 +86,7 @@ def student3(sample = 10, res = 8, activation = 'tanh', dropout = 0.0, rnn_dropo
             inputB_ = tf.expand_dims(inputB_,2)
             inputB_  = tf.tile(inputB_, [1,1, res//updwn,res//updwn,1])
         else:
-            error
+            raise NotImplementedError
 
 
 
@@ -129,15 +129,15 @@ def student3(sample = 10, res = 8, activation = 'tanh', dropout = 0.0, rnn_dropo
                 return_seq = False
         else:
             return_seq = True
-        x = Our_RNN_cell(num_feature,(kernel_size,kernel_size), padding = 'same', return_sequences=return_seq,
+        x = Our_RNN_cell(num_features,(kernel_size,kernel_size), padding = 'same', return_sequences=return_seq,
                             name = 'convLSTM3{}'.format(ind), activation=activation,
                             dropout = dropout,recurrent_dropout=rnn_dropout,)(x)
         if dense_interface:
             if return_seq:
-                x = keras.layers.TimeDistributed(keras.layers.Conv2D(num_feature, (3, 3), padding='same',
+                x = keras.layers.TimeDistributed(keras.layers.Conv2D(num_features, (3, 3), padding='same',
                                         name='anti_sparse'))(x)
             else:
-                x = keras.layers.Conv2D(num_feature, (3, 3), padding='same',
+                x = keras.layers.Conv2D(num_features, (3, 3), padding='same',
                                         name='anti_sparse')(x)
     print(return_seq)
     if time_pool:
@@ -151,7 +151,7 @@ def student3(sample = 10, res = 8, activation = 'tanh', dropout = 0.0, rnn_dropo
     if rggb_ext_type == 2:
         x = keras.layers.UpSampling2D(size=(updwn, updwn))(x)
     if rggb_ext_type == 3:
-        x = keras.layers.Conv2DTranspose(num_feature, (4, 4), strides=(2, 2), padding="same")(x)
+        x = keras.layers.Conv2DTranspose(num_features, (4, 4), strides=(2, 2), padding="same")(x)
 
     if layer_norm:
         x = keras.layers.LayerNormalization(axis=3)(x)

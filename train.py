@@ -15,13 +15,14 @@ from models.student_models import  student3
 from utils.split_keras_model import split_model
 from utils.imagenet_dataset import get_dataset
 from utils.saving_utils import mkdir_if_needed
+from utils.logging import Logger
 from parse_commandline import parse_commandline
-
+from utils.feature_stats import keras_loss_for_soft_binning
 print(os.getcwd() + '/')
 
 config = parse_commandline()
 
-print('config  ',config)
+# print('config  ',config)
 
 parameters = config
 TESTMODE = parameters['testmode']
@@ -32,7 +33,7 @@ save_path = parameters['local_save_path'] if lsbjob is None else parameters['lsb
 
 lsbjob = '' if lsbjob is None else lsbjob
 
-num_feature = parameters['num_feature']
+num_features = parameters['num_features']
 trajectory_index = parameters['trajectory_index']
 n_samples = parameters['n_samples']
 res = parameters['res']
@@ -47,6 +48,23 @@ parameters['this_run_name'] = this_run_name
 epochs = parameters['epochs']
 int_epochs = parameters['int_epochs']
 student_block_size = parameters['student_block_size']
+
+save_model_path = os.path.join(save_path, 'saved_models', this_run_name)
+student_parameters_path = os.path.join(save_model_path, 'student_parameters')
+results_path = os.path.join(save_model_path, 'results_path')
+student_checkpoint_path = os.path.join(save_model_path, 'student_checkpoint')
+fine_tuning_checkpoint_path = os.path.join(save_model_path, 'fine_tuning_checkpoint')
+final_weights_path = os.path.join(save_model_path, 'final_weights')
+mkdir_if_needed(save_model_path)
+mkdir_if_needed(student_parameters_path)
+mkdir_if_needed(student_checkpoint_path)
+mkdir_if_needed(fine_tuning_checkpoint_path)
+mkdir_if_needed(results_path)
+student_checkpoint_filename = os.path.join(student_checkpoint_path, 'student_checkpoint')
+fine_tuning_checkpoint_filename = os.path.join(fine_tuning_checkpoint_path, 'fine_tuning_checkpoint')
+
+sys.stdout = Logger(os.path.join(results_path, 'log.log'))
+
 print(parameters)
 # scale pixels
 
@@ -120,18 +138,6 @@ if True:
     verbose =parameters['verbose']
     evaluate_prediction_size = 150
 
-    save_model_path = os.path.join(save_path,'saved_models',this_run_name)
-    student_parameters_path = os.path.join(save_model_path,'student_parameters')
-    student_checkpoint_path = os.path.join(save_model_path,'student_checkpoint')
-    fine_tuning_checkpoint_path = os.path.join(save_model_path,'fine_tuning_checkpoint')
-    final_weights_path = os.path.join(save_model_path,'final_weights')
-    mkdir_if_needed(save_model_path)
-    mkdir_if_needed(student_parameters_path)
-    mkdir_if_needed(student_checkpoint_path)
-    mkdir_if_needed(fine_tuning_checkpoint_path)
-    student_checkpoint_filename = os.path.join(student_checkpoint_path,'student_checkpoint')
-    fine_tuning_checkpoint_filename = os.path.join(fine_tuning_checkpoint_path,'fine_tuning_checkpoint')
-
     student_checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(
         filepath=student_checkpoint_filename,
         save_weights_only=True,
@@ -181,12 +187,25 @@ else:
 
 print('initializing student')
 
+if parameters['loss'] == 'feature_loss_SKLD':
+    with open(parameters['reference_feature_stats'],'rb') as f:
+        reference_feature_stats = pickle.load(f)
+    if num_features != len(reference_feature_stats['stats']):
+        raise ValueError
+    loss = keras_loss_for_soft_binning(np.array(reference_feature_stats['stats']),
+                                       num_features,
+                                       reference_feature_stats['bin_edges'],
+                                       tau=0.1,
+                                       loss_type='SKLD')
+else:
+    loss = parameters['loss']
+
 drc_fe_args = dict(sample = parameters['n_samples'],
                    res = res,
                     activation = parameters['student_nl'],
                     dropout = dropout,
                     rnn_dropout = rnn_dropout,
-                    num_feature = num_feature,
+                    num_features = num_features,
                    rnn_layer1 = parameters['rnn_layer1'],
                    rnn_layer2 = parameters['rnn_layer2'],
                    layer_norm = parameters['layer_norm_student'],
@@ -196,26 +215,26 @@ drc_fe_args = dict(sample = parameters['n_samples'],
                    add_coordinates = parameters['broadcast'],
                    time_pool = parameters['time_pool'],
                    dense_interface=parameters['dense_interface'],
-                    loss=parameters['loss'],
-                      upsample=parameters['upsample'],
-                      pos_det=parameters['pos_det'],
+                    loss=loss,
+                    upsample=parameters['upsample'],
+                    pos_det=parameters['pos_det'],
                     enable_inputB=enable_inputB,
                     expanded_inputB = False,
                       # reference_net=fe_model,
                     rggb_ext_type=parameters['rggb_ext_type'],
-                      channels=3 if parameters['rggb_ext_type']==0 else 4,
+                    channels=3 if parameters['rggb_ext_type']==0 else 4,
                     updwn=1 if parameters['rggb_ext_type']==0 else 2,
                     kernel_size=parameters['kernel_size'],
                     custom_metrics=[],
-                   teacher_only_mode=parameters['teacher_only_at_low_res'],
+                    teacher_only_mode=parameters['teacher_only_at_low_res'],
                     teacher_net_initial_weight = parameters['teacher_net_initial_weight'],
                     teacher_preprsocessing=parameters['preprocessing']
 #[debug_metric,debug_metric2,debug_metric3,debug_metric4,debug_metric41,debug_metric42,debug_metric43],
                       #only used for control net 210 (as of Nov.11)
                       )
 print(drc_fe_args)
-with open(os.path.join(student_parameters_path,'student_args.pkl'),'wb') as f:
-    pickle.dump(drc_fe_args,f)
+# with open(os.path.join(student_parameters_path,'student_args.pkl'),'wb') as f:
+#     pickle.dump(drc_fe_args,f)
 
 student = student_fun(**drc_fe_args,
                       teacher_net= fe_model if parameters['use_teacher_net_at_low_res'] else None

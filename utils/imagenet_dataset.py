@@ -162,8 +162,10 @@ def _parse_fn_feature_gen(example_serialized, is_training,high_res=224,low_res=5
         return (low_res_frames, label)
     elif kwargs['mode'] == 'low_res_position':
         return (low_res_frames[0], low_res_frames[1])
+    elif kwargs['mode'] == 'low_res_distribution':
+        return (low_res_frames[0], 0) #return something as the second argument to follow format. The distribution loss is vs a fixed distribution
     else:
-        error
+        raise NotImplementedError
 
 def get_dataset(tfrecords_dir, subset, batch_size, **kwargs):
     """Read TFRecords files and turn them into a TFRecordDataset."""
