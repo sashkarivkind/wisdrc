@@ -44,7 +44,11 @@ def parse_commandline(return_parser=False):
     parser.add_argument('--rnn_dropout', default=0.0, type=float, help='dropout1')
     parser.add_argument('--teacher_net_initial_weight', default=0.9, type=float, help='teacher_net_initial_weight')
     parser.add_argument('--reference_feature_stats', default=None, type=str, help='pickle file with reference feature statistics')
-
+    parser.add_argument('--loss_coeffs',
+                        type=list, action='store',
+                        dest='loss_coeffs',
+                        default=[1.,1.],
+                        help='list of coefficients for complex loss')
     parser.add_argument('--pretrained_student_path', default=None, type=str, help='pretrained student, works only with student3')
     parser.add_argument('--pretrained_student_model', default=None, type=str, help='pretrained student model')
     parser.add_argument('--pretrained_decoder_path', default=None, type=str, help='pretrained decoder, UNDER CONSTRUCTION')

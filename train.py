@@ -186,7 +186,7 @@ else:
     error
 
 print('initializing student')
-
+custom_metrics = []
 if parameters['loss'] == 'feature_loss_SKLD':
     with open(parameters['reference_feature_stats'],'rb') as f:
         reference_feature_stats = pickle.load(f)
@@ -197,6 +197,29 @@ if parameters['loss'] == 'feature_loss_SKLD':
                                        reference_feature_stats['bin_edges'],
                                        tau=0.1,
                                        loss_type='SKLD')
+
+elif parameters['loss'] == 'feature_loss_SKLD_sparse2D':
+    with open(parameters['reference_feature_stats'],'rb') as f:
+        reference_feature_stats = pickle.load(f)
+    if num_features != len(reference_feature_stats['stats']):
+        raise ValueError
+    loss1D = keras_loss_for_soft_binning(np.array(reference_feature_stats['stats']),
+                                       num_features,
+                                       reference_feature_stats['bin_edges'],
+                                       tau=0.1,
+                                       loss_type='SKLD',
+                                         custom_name='loss_bins_1D')
+    loss2D = keras_loss_for_soft_binning(np.array(reference_feature_stats['stats_2D']),
+                                       num_features,
+                                       reference_feature_stats['bin_edges_2D'],
+                                         couplings=reference_feature_stats['couplings'],
+                                       tau=0.1,
+                                       loss_type='SKLD',
+                                       mode='sparse2D',
+                                         custom_name='loss_bins_2D')
+    def loss(y1,y2):
+        return parameters['loss_coeffs'][0]*loss1D(y1,y2) + parameters['loss_coeffs'][1]*loss2D(y1,y2)
+    custom_metrics = [loss1D, loss2D]
 else:
     loss = parameters['loss']
 
@@ -225,7 +248,7 @@ drc_fe_args = dict(sample = parameters['n_samples'],
                     channels=3 if parameters['rggb_ext_type']==0 else 4,
                     updwn=1 if parameters['rggb_ext_type']==0 else 2,
                     kernel_size=parameters['kernel_size'],
-                    custom_metrics=[],
+                    custom_metrics=custom_metrics,
                     teacher_only_mode=parameters['teacher_only_at_low_res'],
                     teacher_net_initial_weight = parameters['teacher_net_initial_weight'],
                     teacher_preprsocessing=parameters['preprocessing']
