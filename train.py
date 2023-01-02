@@ -10,7 +10,7 @@ import tensorflow as tf
 from tensorflow import keras
 import time
 import pickle
-from models.student_models import  student3
+from models.student_models import  student3,full_size_rggb_fe
 
 from utils.split_keras_model import split_model
 from utils.imagenet_dataset import get_dataset
@@ -104,7 +104,7 @@ if True:
             split_after_layer = 'block2_pool'
 
         else:
-            error
+            raise NotImplementedError
 
     teacher.compile(loss="categorical_crossentropy",
                     metrics=["categorical_accuracy", "top_k_categorical_accuracy"],
@@ -174,16 +174,10 @@ if True:
 
 if parameters['student_version']==3:
     student_fun = student3
-elif parameters['student_version'] == 4:
-    student_fun = student4
-elif parameters['student_version'] == 5:
-    student_fun = student5
-elif parameters['student_version'] == 103:
-    student_fun = student_ctrl103
-elif parameters['student_version'] == 210:
-    student_fun = student_ctrl210
+elif parameters['student_version'] == 301:
+    student_fun = full_size_rggb_fe
 else:
-    error
+    raise ValueError('unknown student version')
 
 print('initializing student')
 custom_metrics = []
@@ -298,7 +292,7 @@ else:
 
 generator_params = args_to_dict( n_steps=parameters['n_samples'],
                       feature_net=fe_model, preprocessing=parameters['preprocessing'],rggb_mode=parameters['rggb_mode'],
-                      amp=parameters['amp'], return_position_info=enable_inputB, offsets = offsets,
+                      amp=parameters['amp'], return_position_info=enable_inputB, offsets = offsets, low_res = parameters['res'],
                                  unprocess_high_res=parameters['unprocess_high_res'],enable_random_gains=parameters['enable_random_gains'])
 
 print('preparing generators')

@@ -5,11 +5,14 @@ Contains following models:
 student3 - the baseline model, enriched version from the iclr2022 paper
 pos_det101 - position detector model
 """
+import gc
 
 import numpy as np
 import tensorflow as tf
 from tensorflow import keras
 from utils.image_utils import upsample_rggb, upsample_and_reprocess
+from utils.split_keras_model import split_model
+
 
 def student3(sample = 10, res = 8, activation = 'tanh', dropout = 0.0, rnn_dropout = 0.0, upsample = 0,
              num_features = 1, layer_norm = False ,batch_norm = False, n_layers=3, conv_rnn_type='lstm',block_size = 1,
@@ -221,6 +224,61 @@ def pos_det101(sample = 10, res = 8, activation = 'tanh', dropout = 0.0, rnn_dro
     model = keras.models.Model(inputs=inputA,outputs=x, name = 'pos_det')
     opt=tf.keras.optimizers.Adam(lr=1e-3)
 
+    model.compile(
+        optimizer=opt,
+        loss=loss,
+        metrics=["mean_squared_error", "mean_absolute_error", "cosine_similarity"]+metrics,
+    )
+    return model
+
+
+def full_size_rggb_fe(
+            referfence_model = 'keras_resnet50',
+            loss="mean_squared_error",
+            res=224,
+            channels=4,
+            metrics=[],
+             **kwargs):
+    if referfence_model== 'keras_resnet50':
+        teacher = tf.keras.applications.resnet.ResNet50(input_shape=(224, 224, 3),
+                                                        include_top=True,
+                                                        weights='imagenet')
+        split_after_layer = 'pool1_pool'
+        reference_first_layer = 2
+
+    elif referfence_model== 'keras_mobilenet_v2':
+        teacher = tf.keras.applications.mobilenet_v2.MobileNetV2(input_shape=(224, 224, 3),
+                                                                 include_top=True,
+                                                                 weights='imagenet')
+        split_after_layer = 'block_1_depthwise_BN'
+
+    elif referfence_model== 'VGG16':
+        teacher = tf.keras.applications.VGG16(input_shape=(224, 224, 3),
+                                              include_top=True,
+                                              weights='imagenet')
+        split_after_layer = 'block2_pool'
+
+    elif referfence_model== 'VGG19':
+        teacher = tf.keras.applications.VGG19(input_shape=(224, 224, 3),
+                                              include_top=True,
+                                              weights='imagenet')
+        split_after_layer = 'block2_pool'
+    else:
+        raise NotImplementedError
+
+    fe_model, be_model = split_model(teacher, split_after_layer)
+    fe_fe_model, fe_be_model = split_model(fe_model, fe_model.layers[reference_first_layer].name)
+    conv_conf = fe_fe_model.layers[reference_first_layer].get_config()
+    fe_be_model._name="fe_be_model"
+    input = keras.layers.Input(shape=(1, res//2, res//2,channels)) # first singelton dimension for compatibility with DRC inputs
+    x = keras.layers.Reshape(target_shape=(res//2, res//2,channels))(input)
+    x = keras.layers.Conv2D(conv_conf['filters'], kernel_size=conv_conf['kernel_size'], strides=conv_conf['strides'],
+                            padding='same')(x) #todo - generalize
+    x = fe_be_model(x)
+    model = keras.models.Model(inputs=input,outputs=x, name = 'student_model')
+    opt=tf.keras.optimizers.Adam(lr=1e-3)
+    del be_model,fe_fe_model
+    gc.collect()
     model.compile(
         optimizer=opt,
         loss=loss,
