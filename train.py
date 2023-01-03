@@ -68,6 +68,12 @@ sys.stdout = Logger(os.path.join(results_path, 'log.log'))
 print(parameters)
 # scale pixels
 
+if parameters['gpu_id'] > -1:
+    physical_devices = tf.config.list_physical_devices('GPU')
+    tf.config.set_visible_devices(physical_devices[parameters['gpu_id']], 'GPU')
+
+
+
 enable_inputB = parameters['broadcast'] != 0
 
 #%%
