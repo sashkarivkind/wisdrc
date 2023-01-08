@@ -218,7 +218,8 @@ elif parameters['loss'] == 'feature_loss_SKLD_sparse2D':
                                        mode='sparse2D',
                                          custom_name='loss_bins_2D')
     def loss(y1,y2):
-        return parameters['loss_coeffs'][0]*loss1D(y1,y2) + parameters['loss_coeffs'][1]*loss2D(y1,y2)
+#        return parameters['loss_coeffs'][0]*loss1D(y1,y2) + parameters['loss_coeffs'][1]*loss2D(y1,y2)
+        return float(parameters['loss_coeffs'][0])*loss1D(y1,y2) + float(parameters['loss_coeffs'][1])*loss2D(y1,y2)
     custom_metrics = [loss1D, loss2D]
 else:
     loss = parameters['loss']
