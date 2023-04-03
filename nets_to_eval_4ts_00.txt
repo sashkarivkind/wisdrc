@@ -1,0 +1,3 @@
+legend=trained amp 0
+decoder_path=../../toeldad/noname_j36261801_t1676287887_feature/noname_j36261801_t1676287887_saved_models/decoder_trained_model_fix0
+fe_path=../../toeldad/noname_j36261801_t1676287887_feature/noname_j36261801_t1676287887_feature_net_ckpt

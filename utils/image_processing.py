@@ -35,6 +35,7 @@ import tensorflow as tf
 import tensorflow_addons as tfa
 from tensorflow.python.ops import control_flow_ops
 import utils.unprocess as unprocess
+from tensorflow import keras
 
 
 def rescale(x,enforce_def=False,preprocessing='default',**kwargs):
@@ -63,8 +64,10 @@ def rescale(x,enforce_def=False,preprocessing='default',**kwargs):
     elif preprocessing == 'default':
         x = tf.subtract(x, 0.5)
         x = tf.multiply(x, 2.0)
+    elif preprocessing == 'identity':
+        pass
     else:
-        error
+        raise NotImplementedError
 
     return x
 
@@ -176,7 +179,7 @@ def _crop(image, offset_height, offset_width, crop_height, crop_width, resize=No
   return tf.reshape(image, cropped_shape)
 
 
-def _central_crop(image_list, crop_height, crop_width):
+def _central_crop(image_list, crop_height, crop_width, **kwargs):
   """Performs central crops of the given image list.
 
   Args:
@@ -193,12 +196,49 @@ def _central_crop(image_list, crop_height, crop_width):
     image_height = tf.shape(image)[0]
     image_width = tf.shape(image)[1]
 
+    if kwargs['central_squeeze_and_pad_factor'] > 0:
+        image = _central_squeeze_and_pad(image, kwargs['central_squeeze_and_pad_factor'])
+
     offset_height = (image_height - crop_height) / 2
     offset_width = (image_width - crop_width) / 2
 
     outputs.append(_crop(image, offset_height, offset_width,
                          crop_height, crop_width))
   return outputs
+
+def organize_padding(x0,x1):
+    delta = x0 - x1
+    delta = delta//2 +1
+    return [delta, delta]
+
+def _central_squeeze_and_pad(image, squeeze_factor):
+    x = image
+    image_height = tf.shape(image)[0]
+    image_width = tf.shape(image)[1]
+    squeezed_height = tf.cast(squeeze_factor*tf.cast(image_height,tf.float32),tf.int32)
+    squeezed_width = tf.cast(squeeze_factor*tf.cast(image_width,tf.float32),tf.int32)
+    # size = [image_height, image_width]
+    # imresize = [squeezed_height, squeezed_width]
+    # neutral_color = tf.reduce_mean(image,axis=[0,1]) # [0, 0, 0, 0]  # pixel from the image surrounding
+    neutral_color = tf.reduce_mean(image,axis=[0,1]) # [0, 0, 0, 0]  # pixel from the image surrounding
+    #2:
+    x = keras.layers.Resizing(squeezed_height,
+                              squeezed_width,
+                              interpolation='bilinear',
+                              crop_to_aspect_ratio=False, )(x)
+
+    height_padding = organize_padding(image_height, squeezed_height)
+    width_padding = organize_padding(image_width, squeezed_width)
+    # x = tf.pad(
+    #     x, [height_padding, width_padding, [0,0]], mode='CONSTANT', constant_values=neutral_color, name=None
+    #     )
+
+    x = tf.stack( [tf.pad(
+         x[:,:,ii], [height_padding, width_padding], mode='CONSTANT', constant_values=neutral_color[ii], name=None
+         ) for ii in range(3)],
+    axis=2)
+
+    return x
 
 def _central_crop_with_offsets(image, high_res, low_res, offsets, n_steps,**kwargs):
   """Performs central crops of the given image list.
@@ -216,11 +256,15 @@ def _central_crop_with_offsets(image, high_res, low_res, offsets, n_steps,**kwar
   image_height = tf.shape(image)[0]
   image_width = tf.shape(image)[1]
 
+  if kwargs['central_squeeze_and_pad_factor'] > 0:
+      image = _central_squeeze_and_pad(image, kwargs['central_squeeze_and_pad_factor'])
+
   offset_height0 = (image_height - high_res) // 2
   offset_width0 = (image_width - high_res) // 2
 
   high_res_image = _crop(image, offset_height0, offset_width0,
                        high_res, high_res)
+
   # for offset in offsets:
   #   frame = _crop(image, offset_height0 + offset[0], offset_width0 + offset[1],
   #           high_res, high_res,resize=[low_res,low_res])
@@ -229,11 +273,7 @@ def _central_crop_with_offsets(image, high_res, low_res, offsets, n_steps,**kwar
         frame = _crop(image, offset_height0 + offsets[step,0], offset_width0 + offsets[step,1],
                       high_res, high_res, resize=[low_res, low_res])
         low_res_frames.append(frame)
-    # print('bum-------', offsets)
-    # print('bum-------', offset)
-  # print('lenlen ---',len(low_res_frames))
-  # print('lenlen2low ---',low_res_frames)
-  # print('lenlen2high ---',high_res_image)
+
   low_res_frames = tf.stack(low_res_frames)
   return low_res_frames, high_res_image
 
@@ -250,6 +290,7 @@ def _central_crop_with_offsets_rggb(image, high_res, low_res, offsets, n_steps, 
   Returns:
     the list of cropped images.
   """
+  kwargs.setdefault('rggb_teacher', False)
 
   low_res_frames = []
   image_height = tf.shape(image)[0]
@@ -258,21 +299,40 @@ def _central_crop_with_offsets_rggb(image, high_res, low_res, offsets, n_steps, 
   offset_height0 = (image_height - high_res) // 2
   offset_width0 = (image_width - high_res) // 2
 
-  high_res_image = _crop(image, offset_height0, offset_width0,
-                       high_res, high_res)
-  # psf_sigma = 4
-  #
-  # filter_shape = (3*psf_sigma,3*psf_sigma)
-  # image = tfa.image.gaussian_filter2d(image,sigma=psf_sigma,filter_shape=filter_shape)
-  image, _ = unprocess.unprocess(image, do_mosaic=False, **kwargs)
+  if kwargs['rggb_teacher']:
+      #image is the raw image used for obtaining low resolution crops
+      #high_res_image is the cropped version which should match the low resolution crops
+      image, _ = unprocess.unprocess(image, do_mosaic=False, **kwargs)
+
+      high_res_image = _crop(image, offset_height0, offset_width0,
+                           high_res, high_res)
+
+      #prior to mosaic step the image is upsampled:
+      high_res_image = tf.image.resize(high_res_image, [high_res * 2, high_res * 2], method='bilinear')
+      high_res_image = unprocess.mosaic(high_res_image)
+
+      #another, more lossy option is to rescale after mosaicing
+      # high_res_image = tf.image.resize(high_res_image, [high_res, high_res], method='bilinear')
+
+      print('debug ------------------------------100',kwargs['rggb_teacher'])
+  else:
+      high_res_image = _crop(image, offset_height0, offset_width0,
+                           high_res, high_res)
+      image, _ = unprocess.unprocess(image, do_mosaic=False, **kwargs)
+      print('debug ------------------------------200')
+
   for step in range(n_steps):
         frame = _crop(image, offset_height0 + offsets[step,0], offset_width0 + offsets[step,1],
                       high_res, high_res, resize=[low_res, low_res])
         if unprocess_high_res:
+            #this is the default setting where unprocessing is done only once, for the high resolution image
+            #and the crops are performed subsequently so that all the crpped images share the same random channel gains
+            #the noise however is generated for each crop separately in both cases
             frame = unprocess.mosaic(frame)
         else:
             #we keep this option for backward compatibility
             frame,_ = unprocess.unprocess(frame, do_mosaic=True, **kwargs)
+            print('debug ------------------------------300')
 
         shot_noise, read_noise = unprocess.random_noise_levels()
         frame = unprocess.add_noise(frame, shot_noise, read_noise)
@@ -563,7 +623,7 @@ def preprocess_for_eval(image,
     #                                 do_mean_subtraction=False) todo: dig why we removed this
     # if False: #steps that we are skipping for now
     image = _aspect_preserving_resize(image, margin+max(height, width))
-    image = _central_crop([image], height, width)[0]
+    image = _central_crop([image], height, width,**kwargs)[0]
     image.set_shape([height, width, 3])
     # else:
     #     image = _aspect_preserving_resize(image, margin+max(height, width))
@@ -606,6 +666,7 @@ def preprocess_for_eval_n_steps(image,
                         scope=None,
                         relative_to_initial_offset=False,
                         enforce_zero_initial_offset=False,
+                        varying_max_amp=False,
                         add_image_summaries=False, **kwargs):
   """Prepare one image for evaluation.
 
@@ -642,7 +703,11 @@ def preprocess_for_eval_n_steps(image,
         else:
             offsets = offsets_
     else:
-        offsets = tf.random.uniform(shape=(n_steps, 2), minval=-amp, maxval=amp + 1, dtype=tf.int32)
+        if varying_max_amp:
+            max_amp = tf.random.uniform(shape=(n_steps, 2), minval=0, maxval=amp + 1, dtype=tf.int32)
+        else:
+            max_amp = amp
+        offsets = tf.random.uniform(shape=(n_steps, 2), minval=-max_amp, maxval=max_amp + 1, dtype=tf.int32)
         if centered_offsets:
             offsets = offsets - tf.expand_dims(tf.cast(tf.reduce_mean(offsets,axis=0),tf.int32),0)
         elif enforce_zero_initial_offset:
@@ -693,23 +758,30 @@ def preprocess_image(image,
   if 'n_steps' in kwargs.keys() and not teacher_mode:
       multistep = kwargs['n_steps']
 
+  rggb_mode = False
+  if 'rggb_mode' in kwargs.keys():
+      rggb_mode = kwargs['rggb_mode']
+
+  kwargs_upd = kwargs
+  if rggb_mode:
+      kwargs_upd['preprocessing'] = 'identity'
+
   if is_training:
     bbox = tf.constant([0.0, 0.0, 1.0, 1.0],
                        dtype=tf.float32,
                        shape=[1, 1, 4])
-
-    if multistep > 0:
-        preprocessed_frames = [preprocess_for_train(image, height, width, bbox, fast_mode=True) for ii in range(multistep)]
-    else:
-        preprocessed_image = preprocess_for_train(image, height, width, bbox, fast_mode=True, **kwargs)
+    preprocessed_image = preprocess_for_train(image, height, width, bbox, fast_mode=True, **kwargs_upd)
   else:
-    if multistep > 0:
-        preprocessed_frames = [preprocess_for_eval(image, height, width) for ii in range(multistep)]
-    else:
-        preprocessed_image = preprocess_for_eval(image, height, width, **kwargs)
+    preprocessed_image = preprocess_for_eval(image, height, width, **kwargs_upd)
 
-  if multistep > 0:
-      preprocessed_image = tf.stack(preprocessed_frames)
+  if rggb_mode:
+      preprocessed_image = tf.image.resize(preprocessed_image, [height*2, width*2],method='bilinear')
+      preprocessed_image, _ = unprocess.unprocess(preprocessed_image, do_mosaic=True,**kwargs_upd)
+
+      shot_noise, read_noise = unprocess.random_noise_levels()
+      preprocessed_image = unprocess.add_noise(preprocessed_image, shot_noise, read_noise)
+      preprocessed_image = rescale(preprocessed_image)
+
   return preprocessed_image
   # old simple version
   # if is_training:
@@ -747,3 +819,8 @@ def preprocess_image_drc(image,
                         amp=amp,
                         **kwargs)
     return low_res_frames, high_res_image
+
+#Example of gaussian blurring
+  # psf_sigma = 4
+  # filter_shape = (3*psf_sigma,3*psf_sigma)
+  # image = tfa.image.gaussian_filter2d(image,sigma=psf_sigma,filter_shape=filter_shape)

@@ -1,0 +1,37 @@
+    1  cd /home/arivkind/wisdrc/
+    2  git add --all
+    3  git commit -m 'fixed parsing list-type arguments'
+    4  git config --global user.email "sashkarivkind@gmail.com"
+    5  git commit -m 'fixed parsing list-type arguments'
+    6  git push 
+    7  ls ../drc_saves/saved_models/
+    8  ls ../drc_saves/saved_models/noname_j_t1672834930/results_path/log.log 
+    9  less ../drc_saves/saved_models/noname_j_t1672834930/results_path/log.log 
+   10  du -hs ../drc_saves/saved_models/noname_j_t1672834930/
+   11  rm -rf ../drc_saves/saved_models/noname_j_t1672834930/
+   12  rm -rf ../drc_saves/saved_models/noname_j_t1672777287/
+   13  ls ../drc_saves/saved_models/noname_j_t1672777287/
+   14  ls ../drc_saves/saved_models/noname_j_t1672777098/
+   15  ls ../drc_saves/saved_models/noname_j_t1672777098/results_path/log.log 
+   16  less ../drc_saves/saved_models/noname_j_t1672777098/results_path/log.log 
+   17  grep teacher_net_initial_weight ../drc_saves/saved_models/*//results_path/log.log
+   18  less ../drc_saves/saved_models/noname_j_t1672528308/results_path/log.log
+   19  ls ../drc_saves/saved_models/
+   20  less ../drc_saves/saved_models/noname_j_t1672509983/results_path/log.log
+   21  less ../drc_saves/saved_models/noname_j_t1672348539/results_path/log.log
+   22  less ../drc_saves/saved_models/noname_j_t1672836274/results_path/log.log
+   23  less ../drc_saves/saved_models/noname_j_t1672835645/results_path/log.log
+   24  less ../drc_saves/saved_models/noname_j_t1672822118/results_path/log.log
+   25  less ../drc_saves/saved_models/noname_j_t1672822035/results_path/log.log
+   26  less ../drc_saves/saved_models/noname_j_t1672835698/results_path/log.log
+   27  du -sh ../drc_saves/saved_models/noname_j_t1672835698/results_path/log.log
+   28  du -sh ../drc_saves/saved_models/noname_j_t1672835311/results_path/log.log
+   29  less ../drc_saves/saved_models/noname_j_t1672835311/results_path/log.log
+   30  du -sh ../drc_saves/saved_models/noname_j_t1672835311/
+   31  less ../drc_saves/saved_models/noname_j_t1672821917/results_path/log.log
+   32  less ../drc_saves/saved_models/noname_j_t1672777098/results_path/log.log
+   33  python train.py --local_save_path /home/arivkind/drc_saves/ --dataset_dir ../datasets/tensorflow_datasets/imagenet2012/5.0.0/ --student_nl relu --dropout 0.0 --rnn_dropout 0.0 --conv_rnn_type lstm --n_samples 5 --max_length 5 --epochs 10 --int_epochs 0 --student_block_size 1 --time_pool average_pool --student_version 3 --resnet_mode --decoder_optimizer SGD --val_set_mult 1 --res 56 --verbose 2 --broadcast 0 --amp 2 --rggb_ext_type 3 --kernel_size 3 --use_teacher --loss feature_loss_SKLD_sparse2D --reference_feature_stats data_files/reference_feature_stats_resnet50_eq10bins_strong3x3bins_1920img_v2.pkl --batch_size 64 --fine_tune_student --teacher_net_initial_weight 0.8 --loss_coeffs 0 --loss_coeffs 1 --gpu_id 3
+   34  zzpython train.py --local_save_path /home/arivkind/drc_saves/ --dataset_dir ../datasets/tensorflow_datasets/imagenet2012/5.0.0/ --student_nl relu --dropout 0.0 --rnn_dropout 0.0 --conv_rnn_type lstm --n_samples 5 --max_length 5 --epochs 100 --int_epochs 0 --student_block_size 1 --time_pool average_pool --student_version 3 --resnet_mode --decoder_optimizer SGD --val_set_mult 1 --res 56 --verbose 2 --broadcast 0 --amp 2 --rggb_ext_type 3 --kernel_size 3  --batch_size 64 --fine_tune_student  --gpu_id 3  --decoder_epochs 200
+   35  python train.py --local_save_path /home/arivkind/drc_saves/ --dataset_dir ../datasets/tensorflow_datasets/imagenet2012/5.0.0/ --student_nl relu --dropout 0.0 --rnn_dropout 0.0 --conv_rnn_type lstm --n_samples 5 --max_length 5 --epochs 10 --int_epochs 0 --student_block_size 1 --time_pool average_pool --student_version 3 --resnet_mode --decoder_optimizer SGD --val_set_mult 1 --res 56 --verbose 2 --broadcast 0 --amp 2 --no-rggb_mode --kernel_size 3 --use_teacher --loss feature_loss_SKLD_sparse2D --reference_feature_stats data_files/reference_feature_stats_resnet50_eq10bins_strong3x3bins_1920img_v2.pkl --batch_size 64 --fine_tune_student --teacher_net_initial_weight 0.8 --loss_coeffs 1 --loss_coeffs 1 --gpu_id 3
+   36  nvidia-smi 
+   37  history > docker_history_Jan23b.txt

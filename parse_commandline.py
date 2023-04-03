@@ -18,6 +18,7 @@ def parse_commandline(return_parser=False):
     parser.add_argument('--no-testmode', dest='testmode', action='store_false')
 
     parser.add_argument('--batch_size', default=32, type=int, help='batch size')
+    parser.add_argument('--gpu_id', default=-1, type=int, help='gpu id to use, -1 for default')
     ### student parameters
 
     parser.add_argument('--stu_steps_per_epoch', default=1000, type=int, help='batches per epoch, student pre-training')
@@ -25,7 +26,7 @@ def parse_commandline(return_parser=False):
     parser.add_argument('--epochs', default=1, type=int, help='num training epochs')
     parser.add_argument('--int_epochs', default=1, type=int, help='num internal training epochs')
     parser.add_argument('--decoder_epochs', default=40, type=int, help='num internal training epochs')
-    parser.add_argument('--num_feature', default=64, type=int, help='legacy to be discarded')
+    parser.add_argument('--num_features', default=64, type=int, help='number of features at the DRC interface')
     parser.add_argument('--rnn_layer1', default=32, type=int, help='legacy to be discarded')
     parser.add_argument('--rnn_layer2', default=64, type=int, help='legacy to be discarded')
     parser.add_argument('--time_pool', default=0, help='time dimension pooling to use - max_pool, average_pool, 0')
@@ -37,13 +38,19 @@ def parse_commandline(return_parser=False):
     parser.add_argument('--centered_offsets', dest='centered_offsets', action='store_true')
     parser.add_argument('--no-centered_offsets', dest='centered_offsets', action='store_false')
 
+    parser.add_argument('--nets_to_eval', default=None, type=str, help='text file with a list of nets to eval by eval_loops.py')
 
     parser.add_argument('--conv_rnn_type', default='lstm', type=str, help='conv_rnn_type')
     parser.add_argument('--student_nl', default='relu', type=str, help='non linearity')
     parser.add_argument('--dropout', default=0.2, type=float, help='dropout1')
     parser.add_argument('--rnn_dropout', default=0.0, type=float, help='dropout1')
     parser.add_argument('--teacher_net_initial_weight', default=0.9, type=float, help='teacher_net_initial_weight')
-
+    parser.add_argument('--reference_feature_stats', default=None, type=str, help='pickle file with reference feature statistics')
+    parser.add_argument('--loss_coeffs',
+                        type=float, action='append',
+                        dest='loss_coeffs',
+                        default=[],
+                        help='list of coefficients for complex loss')
     parser.add_argument('--pretrained_student_path', default=None, type=str, help='pretrained student, works only with student3')
     parser.add_argument('--pretrained_student_model', default=None, type=str, help='pretrained student model')
     parser.add_argument('--pretrained_decoder_path', default=None, type=str, help='pretrained decoder, UNDER CONSTRUCTION')
@@ -58,6 +65,7 @@ def parse_commandline(return_parser=False):
 
     parser.add_argument('--preprocessing', default='keras_resnet50', type=str, help='low-level preprocessing')
     parser.add_argument('--teacher_model', default='keras_resnet50', type=str, help='low-level preprocessing')
+    parser.add_argument('--split_after_layer', default=None, type=str, help='low-level preprocessing')
 
 
     parser.add_argument('--skip_student_training', dest='skip_student_training', action='store_true')
@@ -80,10 +88,16 @@ def parse_commandline(return_parser=False):
     parser.add_argument('--teacher_only_at_low_res', dest='teacher_only_at_low_res', action='store_true')
     parser.add_argument('--no-teacher_only_at_low_res', dest='teacher_only_at_low_res', action='store_false')
 
+    parser.add_argument('--baseline_rggb_mode', dest='baseline_rggb_mode', action='store_true')
+    parser.add_argument('--no-baseline_rggb_mode', dest='baseline_rggb_mode', action='store_false')
+
+
+
     ### syclop parameters
     parser.add_argument('--trajectory_index', default=0, type=int, help='trajectory index - set to 0 because we use multiple trajectories')
     parser.add_argument('--n_samples', default=5, type=int, help='n_samples')
     parser.add_argument('--res', default=8, type=int, help='resolution')
+    parser.add_argument('--central_squeeze_and_pad_factor', default=-1, type=float, help='factor by which to squeeze the original image, before applying low resolution sensor ')
 
     parser.add_argument('--manual_trajectories', dest='manual_trajectories', action='store_true')
     parser.add_argument('--no-manual_trajectories', dest='manual_trajectories', action='store_false')
@@ -101,7 +115,6 @@ def parse_commandline(return_parser=False):
     parser.add_argument('--random_n_samples', default=0, type=int, help='weather to drew random lengths of trajectories')
 
     ### teacher network parameters
-    parser.add_argument('--teacher_net', default=None, type=str, help='path to pretrained teacher net')
     parser.add_argument('--dataset_dir', default='/home/bnapp/datasets/tensorflow_datasets/imagenet2012/5.0.0/', type=str, help='path to the dataset')
 
     parser.add_argument('--resblocks', default=3, type=int, help='resblocks')
@@ -180,10 +193,18 @@ def parse_commandline(return_parser=False):
     parser.add_argument('--rggb_mode', dest='rggb_mode', action='store_true')
     parser.add_argument('--no-rggb_mode', dest='rggb_mode', action='store_false')
 
+    parser.add_argument('--skip_final_saves', dest='skip_final_saves', action='store_true')
+    parser.add_argument('--no-skip_final_saves', dest='skip_final_saves', action='store_false')
+
     parser.add_argument('--evaluate_final_model', dest='evaluate_final_model', action='store_true')
     parser.add_argument('--no-evaluate_final_model', dest='evaluate_final_model', action='store_false')
 
+    parser.add_argument('--varying_max_amp', dest='evaluate_final_model', action='store_true')
+    parser.add_argument('--no-varying_max_amp', dest='evaluate_final_model', action='store_false')
+
+
     parser.set_defaults(data_augmentation=True,
+                        skip_final_saves=False,
                         layer_norm_res=True,
                         layer_norm_student=True,
                         batch_norm_student=False,
@@ -209,6 +230,8 @@ def parse_commandline(return_parser=False):
                         evaluate_final_model = False,
                         use_teacher_net_at_low_res = False,
                         teacher_only_at_low_res = False,
+                        baseline_rggb_mode=False,
+                        varying_max_amp=False
 
         )
     if return_parser:

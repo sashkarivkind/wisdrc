@@ -10,18 +10,19 @@ import tensorflow as tf
 from tensorflow import keras
 import time
 import pickle
-from models.student_models import  student3
+from models.student_models import  student3,full_size_rggb_fe
 
 from utils.split_keras_model import split_model
 from utils.imagenet_dataset import get_dataset
 from utils.saving_utils import mkdir_if_needed
+from utils.logging import Logger
 from parse_commandline import parse_commandline
-
+from utils.feature_stats import keras_loss_for_soft_binning
 print(os.getcwd() + '/')
 
 config = parse_commandline()
 
-print('config  ',config)
+# print('config  ',config)
 
 parameters = config
 TESTMODE = parameters['testmode']
@@ -32,7 +33,7 @@ save_path = parameters['local_save_path'] if lsbjob is None else parameters['lsb
 
 lsbjob = '' if lsbjob is None else lsbjob
 
-num_feature = parameters['num_feature']
+num_features = parameters['num_features']
 trajectory_index = parameters['trajectory_index']
 n_samples = parameters['n_samples']
 res = parameters['res']
@@ -47,8 +48,31 @@ parameters['this_run_name'] = this_run_name
 epochs = parameters['epochs']
 int_epochs = parameters['int_epochs']
 student_block_size = parameters['student_block_size']
+
+save_model_path = os.path.join(save_path, 'saved_models', this_run_name)
+student_parameters_path = os.path.join(save_model_path, 'student_parameters')
+results_path = os.path.join(save_model_path, 'results_path')
+student_checkpoint_path = os.path.join(save_model_path, 'student_checkpoint')
+fine_tuning_checkpoint_path = os.path.join(save_model_path, 'fine_tuning_checkpoint')
+final_weights_path = os.path.join(save_model_path, 'final_weights')
+mkdir_if_needed(save_model_path)
+mkdir_if_needed(student_parameters_path)
+mkdir_if_needed(student_checkpoint_path)
+mkdir_if_needed(fine_tuning_checkpoint_path)
+mkdir_if_needed(results_path)
+student_checkpoint_filename = os.path.join(student_checkpoint_path, 'student_checkpoint')
+fine_tuning_checkpoint_filename = os.path.join(fine_tuning_checkpoint_path, 'fine_tuning_checkpoint')
+
+sys.stdout = Logger(os.path.join(results_path, 'log.log'))
+
 print(parameters)
 # scale pixels
+
+if parameters['gpu_id'] > -1:
+    physical_devices = tf.config.list_physical_devices('GPU')
+    tf.config.set_visible_devices(physical_devices[parameters['gpu_id']], 'GPU')
+
+
 
 enable_inputB = parameters['broadcast'] != 0
 
@@ -57,36 +81,41 @@ enable_inputB = parameters['broadcast'] != 0
 
 path = os.getcwd() + '/'
 if True:
-    if parameters['teacher_net'] is not None:
-        teacher = keras.models.load_model(parameters['teacher_net'])
+    if parameters['teacher_model']=='keras_resnet50':
+        teacher = tf.keras.applications.resnet.ResNet50(input_shape=(224, 224, 3),
+                                                              include_top=True,
+                                                              weights='imagenet')
+        default_split_after_layer = 'pool1_pool'
+
+    elif parameters['teacher_model']=='keras_mobilenet_v2':
+        teacher = tf.keras.applications.mobilenet_v2.MobileNetV2(input_shape=(224, 224, 3),
+                                                              include_top=True,
+                                                              weights='imagenet')
+        default_split_after_layer = 'block_1_depthwise_BN'
+
+    elif parameters['teacher_model']=='VGG16':
+        teacher = tf.keras.applications.VGG16(input_shape=(224, 224, 3),
+                                                              include_top=True,
+                                                              weights='imagenet')
+        default_split_after_layer = 'block2_pool'
+
+    elif parameters['teacher_model']=='VGG19':
+        teacher = tf.keras.applications.VGG19(input_shape=(224, 224, 3),
+                                                              include_top=True,
+                                                              weights='imagenet')
+        default_split_after_layer = 'block2_pool'
 
     else:
-        if parameters['teacher_model']=='keras_resnet50':
-            teacher = tf.keras.applications.resnet.ResNet50(input_shape=(224, 224, 3),
-                                                                  include_top=True,
-                                                                  weights='imagenet')
-            split_after_layer = 'pool1_pool'
+        teacher = keras.models.load_model(parameters['teacher_model'])
+        # if using a custom model - must specify custom_split_layer
 
-        elif parameters['teacher_model']=='keras_mobilenet_v2':
-            teacher = tf.keras.applications.mobilenet_v2.MobileNetV2(input_shape=(224, 224, 3),
-                                                                  include_top=True,
-                                                                  weights='imagenet')
-            split_after_layer = 'block_1_depthwise_BN'
 
-        elif parameters['teacher_model']=='VGG16':
-            teacher = tf.keras.applications.VGG16(input_shape=(224, 224, 3),
-                                                                  include_top=True,
-                                                                  weights='imagenet')
-            split_after_layer = 'block2_pool'
+    if parameters['split_after_layer'] is None:
+        split_after_layer = default_split_after_layer
+    else:
+        split_after_layer = parameters['split_after_layer']
 
-        elif parameters['teacher_model']=='VGG19':
-            teacher = tf.keras.applications.VGG19(input_shape=(224, 224, 3),
-                                                                  include_top=True,
-                                                                  weights='imagenet')
-            split_after_layer = 'block2_pool'
 
-        else:
-            error
 
     teacher.compile(loss="categorical_crossentropy",
                     metrics=["categorical_accuracy", "top_k_categorical_accuracy"],
@@ -119,18 +148,6 @@ if True:
     ##################### Define Student #########################################
     verbose =parameters['verbose']
     evaluate_prediction_size = 150
-
-    save_model_path = os.path.join(save_path,'saved_models',this_run_name)
-    student_parameters_path = os.path.join(save_model_path,'student_parameters')
-    student_checkpoint_path = os.path.join(save_model_path,'student_checkpoint')
-    fine_tuning_checkpoint_path = os.path.join(save_model_path,'fine_tuning_checkpoint')
-    final_weights_path = os.path.join(save_model_path,'final_weights')
-    mkdir_if_needed(save_model_path)
-    mkdir_if_needed(student_parameters_path)
-    mkdir_if_needed(student_checkpoint_path)
-    mkdir_if_needed(fine_tuning_checkpoint_path)
-    student_checkpoint_filename = os.path.join(student_checkpoint_path,'student_checkpoint')
-    fine_tuning_checkpoint_filename = os.path.join(fine_tuning_checkpoint_path,'fine_tuning_checkpoint')
 
     student_checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(
         filepath=student_checkpoint_filename,
@@ -168,25 +185,55 @@ if True:
 
 if parameters['student_version']==3:
     student_fun = student3
-elif parameters['student_version'] == 4:
-    student_fun = student4
-elif parameters['student_version'] == 5:
-    student_fun = student5
-elif parameters['student_version'] == 103:
-    student_fun = student_ctrl103
-elif parameters['student_version'] == 210:
-    student_fun = student_ctrl210
+elif parameters['student_version'] == 301:
+    student_fun = full_size_rggb_fe
 else:
-    error
+    raise ValueError('unknown student version')
 
 print('initializing student')
+custom_metrics = []
+if parameters['loss'] == 'feature_loss_SKLD':
+    with open(parameters['reference_feature_stats'],'rb') as f:
+        reference_feature_stats = pickle.load(f)
+    if num_features != len(reference_feature_stats['stats']):
+        raise ValueError
+    loss = keras_loss_for_soft_binning(np.array(reference_feature_stats['stats']),
+                                       num_features,
+                                       reference_feature_stats['bin_edges'],
+                                       tau=0.1,
+                                       loss_type='SKLD')
+
+elif parameters['loss'] == 'feature_loss_SKLD_sparse2D':
+    with open(parameters['reference_feature_stats'],'rb') as f:
+        reference_feature_stats = pickle.load(f)
+    if num_features != len(reference_feature_stats['stats']):
+        raise ValueError
+    loss1D = keras_loss_for_soft_binning(np.array(reference_feature_stats['stats']),
+                                       num_features,
+                                       reference_feature_stats['bin_edges'],
+                                       tau=0.1,
+                                       loss_type='SKLD',
+                                         custom_name='loss_bins_1D')
+    loss2D = keras_loss_for_soft_binning(np.array(reference_feature_stats['stats_2D']),
+                                       num_features,
+                                       reference_feature_stats['bin_edges_2D'],
+                                         couplings=reference_feature_stats['couplings'],
+                                       tau=0.1,
+                                       loss_type='SKLD',
+                                       mode='sparse2D',
+                                         custom_name='loss_bins_2D')
+    def loss(y1,y2):
+        return float(parameters['loss_coeffs'][0])*loss1D(y1,y2) + float(parameters['loss_coeffs'][1])*loss2D(y1,y2)
+    custom_metrics = [loss1D, loss2D]
+else:
+    loss = parameters['loss']
 
 drc_fe_args = dict(sample = parameters['n_samples'],
                    res = res,
                     activation = parameters['student_nl'],
                     dropout = dropout,
                     rnn_dropout = rnn_dropout,
-                    num_feature = num_feature,
+                    num_features = num_features,
                    rnn_layer1 = parameters['rnn_layer1'],
                    rnn_layer2 = parameters['rnn_layer2'],
                    layer_norm = parameters['layer_norm_student'],
@@ -196,26 +243,26 @@ drc_fe_args = dict(sample = parameters['n_samples'],
                    add_coordinates = parameters['broadcast'],
                    time_pool = parameters['time_pool'],
                    dense_interface=parameters['dense_interface'],
-                    loss=parameters['loss'],
-                      upsample=parameters['upsample'],
-                      pos_det=parameters['pos_det'],
+                    loss=loss,
+                    upsample=parameters['upsample'],
+                    pos_det=parameters['pos_det'],
                     enable_inputB=enable_inputB,
                     expanded_inputB = False,
                       # reference_net=fe_model,
                     rggb_ext_type=parameters['rggb_ext_type'],
-                      channels=3 if parameters['rggb_ext_type']==0 else 4,
+                    channels=3 if parameters['rggb_ext_type']==0 else 4,
                     updwn=1 if parameters['rggb_ext_type']==0 else 2,
                     kernel_size=parameters['kernel_size'],
-                    custom_metrics=[],
-                   teacher_only_mode=parameters['teacher_only_at_low_res'],
+                    custom_metrics=custom_metrics,
+                    teacher_only_mode=parameters['teacher_only_at_low_res'],
                     teacher_net_initial_weight = parameters['teacher_net_initial_weight'],
                     teacher_preprsocessing=parameters['preprocessing']
 #[debug_metric,debug_metric2,debug_metric3,debug_metric4,debug_metric41,debug_metric42,debug_metric43],
                       #only used for control net 210 (as of Nov.11)
                       )
 print(drc_fe_args)
-with open(os.path.join(student_parameters_path,'student_args.pkl'),'wb') as f:
-    pickle.dump(drc_fe_args,f)
+# with open(os.path.join(student_parameters_path,'student_args.pkl'),'wb') as f:
+#     pickle.dump(drc_fe_args,f)
 
 student = student_fun(**drc_fe_args,
                       teacher_net= fe_model if parameters['use_teacher_net_at_low_res'] else None
@@ -256,12 +303,14 @@ else:
 
 generator_params = args_to_dict( n_steps=parameters['n_samples'],
                       feature_net=fe_model, preprocessing=parameters['preprocessing'],rggb_mode=parameters['rggb_mode'],
-                      amp=parameters['amp'], return_position_info=enable_inputB, offsets = offsets,
-                                 unprocess_high_res=parameters['unprocess_high_res'],enable_random_gains=parameters['enable_random_gains'])
+                      amp=parameters['amp'], return_position_info=enable_inputB, offsets = offsets, low_res = parameters['res'],
+                      unprocess_high_res=parameters['unprocess_high_res'],enable_random_gains=parameters['enable_random_gains'],
+                    rggb_teacher=parameters['baseline_rggb_mode'], central_squeeze_and_pad_factor=parameters['central_squeeze_and_pad_factor'],varying_max_amp=parameters['varying_max_amp'])
 
 print('preparing generators')
 
-val_generator_baseline = get_dataset(parameters['dataset_dir'], 'validation', batch_size, preprocessing=parameters['preprocessing'])
+val_generator_baseline = get_dataset(parameters['dataset_dir'], 'validation', batch_size, preprocessing=parameters['preprocessing'],rggb_mode=parameters['baseline_rggb_mode'],
+                                     central_squeeze_and_pad_factor=parameters['central_squeeze_and_pad_factor'])
 
 # generator for the feature learning
 train_generator_features =  get_dataset(parameters['dataset_dir'], 'train', batch_size, mode='low_res_features',centered_offsets=parameters['centered_offsets'],
@@ -277,14 +326,14 @@ val_generator_classifier = get_dataset(parameters['dataset_dir'], 'validation', 
 
 gc.collect()
 if True:
-
-    teacher.evaluate(val_generator_baseline, steps=500 // batch_size , verbose = verbose)
+    print('Evaluating teacher network')
+    teacher.evaluate(val_generator_baseline, steps=1000 // batch_size , verbose = verbose)
     if parameters['pretrained_student_model'] is not None:
         student = keras.models.load_model(parameters['pretrained_student_model'], custom_objects={'dummy_metric': dummy_metric})
     if parameters['pretrained_student_path'] is not None:
         load_status = student.load_weights(parameters['pretrained_student_path'])
 
-    print('training features')
+    print('Training features')
     if not parameters['skip_student_training']:
         student_history = student.fit(x=train_generator_features,
                                         steps_per_epoch=parameters['stu_steps_per_epoch'],#1281167 // batch_size,
@@ -319,6 +368,8 @@ if parameters['decoder_optimizer'] == 'Adam':
     opt=tf.keras.optimizers.Adam(lr=2.5e-4)
 elif parameters['decoder_optimizer'] == 'SGD':
     opt=tf.keras.optimizers.SGD(lr=2.5e-3)
+elif parameters['decoder_optimizer'] == 'RMSprop':
+    opt=tf.keras.optimizers.RMSprop(lr=2.5e-4)
 else:
     error
 def get_lr_metric(optimizer):
@@ -362,16 +413,19 @@ decoder_history = fro_student_and_decoder.fit(train_generator_classifier,
                                               validation_steps=1000,  # 50000 // batch_size,
                                               workers=8, use_multiprocessing=True)
 
-decoder_post_training = fro_student_and_decoder.layers[-1]
-decoder_post_training.save(os.path.join(final_weights_path,'decoder_final_model'))
+if not parameters['skip_final_saves']:
+    decoder_post_training = fro_student_and_decoder.layers[-1]
+    decoder_post_training.save(os.path.join(final_weights_path,'decoder_final_model'))
 
-# if parameters['fine_tune_student']:
-fe_post_training = fro_student_and_decoder.layers[-2]
-fe_post_training.save_weights(os.path.join(final_weights_path,'fe_final_weights','fe_final_weights'))
+    # if parameters['fine_tune_student']:
+    fe_post_training = fro_student_and_decoder.layers[-2]
+    fe_post_training.save_weights(os.path.join(final_weights_path,'fe_final_weights','fe_final_weights'))
 
 
 if parameters['evaluate_final_model']:
     print('evaluating the final model')
     fro_student_and_decoder.evaluate(val_generator_classifier, steps=1000)
+print('\nFinished')
 
 # fe_post_training = fro_student_and_decoder.layers[-2]
+# python train.py --student_nl relu --dropout 0.0 --rnn_dropout 0.0 --conv_rnn_type lstm --n_samples 4 --max_length 4 --epochs 10 --int_epochs 0 --teacher_model keras_mobilenet_v2 --student_block_size 3 --time_pool average_pool --student_version 3 --resnet_mode --decoder_optimizer SGD --val_set_mult 1 --res 56 --verbose 2 --broadcast 0 --centered_offsets --amp 2 --rggb_ext_type 0 --kernel_size 3 --no-rggb_mode --num_feature 96 --stu_steps_per_epoch 10000 --preprocessing keras_mobilenet_v2 --skip_student_training --decoder_epochs 0 --skip_final_saves --pretrained_decoder_path ../../toeldad/noname_j36667120_t1677070345_feature/noname_j36667120_t1677070345_saved_models/decoder_trained_model_fix0 --pretrained_student_path ../../toeldad/noname_j36667120_t1677070345_feature/noname_j36667120_t1677070345_feature_net_ckpt

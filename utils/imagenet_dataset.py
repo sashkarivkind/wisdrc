@@ -40,7 +40,7 @@ def decode_jpeg(image_buffer, scope=None):
     return image
 
 
-def _parse_fn(example_serialized, is_training,**kwargs):
+def _parse_fn(example_serialized, is_training,image_h=224,image_w=224,**kwargs):
     """Helper function for parse_fn_train() and parse_fn_valid()
 
     Each Example proto (TFRecord) contains the following fields:
@@ -86,9 +86,10 @@ def _parse_fn(example_serialized, is_training,**kwargs):
     parsed = tf.io.parse_single_example(example_serialized, feature_map)
     image = decode_jpeg(parsed['image'])
     if config.DATA_AUGMENTATION:
-        image = preprocess_image(image, 224, 224, is_training=is_training,**kwargs)
+        image = preprocess_image(image, image_h, image_w, is_training=is_training,**kwargs)
     else:
-        image = resize_and_rescale_image(image, 224, 224,**kwargs)
+        raise NotImplementedError
+        #image = resize_and_rescale_image(image, 224, 224,**kwargs)
     # The labedl in the tfrecords is 1~1000 (0 not used).
     # So I think the minus 1 (of class label) is needed below.
     label = tf.one_hot(parsed['label'] , 1000, dtype=tf.float32) ##todo!!!!!!
@@ -141,7 +142,7 @@ def _parse_fn_feature_gen(example_serialized, is_training,high_res=224,low_res=5
     parsed = tf.io.parse_single_example(example_serialized, feature_map)
     image = decode_jpeg(parsed['image'])
 
-    print('debug uuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuu amp',kwargs['amp'])
+    # print('debug uuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuu amp',kwargs['amp'])
 
     low_res_frames, high_res_image = preprocess_image_drc(image, high_res, low_res, is_training=is_training,teacher_mode=True,**kwargs)
 
@@ -163,7 +164,7 @@ def _parse_fn_feature_gen(example_serialized, is_training,high_res=224,low_res=5
     elif kwargs['mode'] == 'low_res_position':
         return (low_res_frames[0], low_res_frames[1])
     else:
-        error
+        raise NotImplementedError
 
 def get_dataset(tfrecords_dir, subset, batch_size, **kwargs):
     """Read TFRecords files and turn them into a TFRecordDataset."""
