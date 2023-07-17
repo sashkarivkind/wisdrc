@@ -19,6 +19,10 @@ def parse_commandline(return_parser=False):
 
     parser.add_argument('--batch_size', default=32, type=int, help='batch size')
     parser.add_argument('--gpu_id', default=-1, type=int, help='gpu id to use, -1 for default')
+    parser.add_argument('--image_h', default=224, type=int, help='high res frame HxW')
+    parser.add_argument('--image_w', default=-224, type=int,help='high res frame HxW')
+
+
     ### student parameters
 
     parser.add_argument('--stu_steps_per_epoch', default=1000, type=int, help='batches per epoch, student pre-training')

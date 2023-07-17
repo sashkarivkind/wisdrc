@@ -96,7 +96,10 @@ def _parse_fn(example_serialized, is_training,image_h=224,image_w=224,**kwargs):
     # print('example of labeling:', parsed['file_name'],'--------',parsed['label'])
     return (image, label)
 
-def _parse_fn_feature_gen(example_serialized, is_training,high_res=224,low_res=56,**kwargs):
+def _parse_fn_feature_gen(example_serialized, is_training,image_w=224, image_h=224 ,low_res=56,**kwargs):
+    high_res = image_w
+    if image_w != image_h:
+        raise NotImplementedError
     """Helper function for parse_fn_train() and parse_fn_valid()
 
     Each Example proto (TFRecord) contains the following fields:

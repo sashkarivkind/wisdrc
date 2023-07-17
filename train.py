@@ -107,6 +107,7 @@ if True:
 
     else:
         teacher = keras.models.load_model(parameters['teacher_model'])
+        teacher.summary()
         # if using a custom model - must specify custom_split_layer
 
 
@@ -305,11 +306,13 @@ generator_params = args_to_dict( n_steps=parameters['n_samples'],
                       feature_net=fe_model, preprocessing=parameters['preprocessing'],rggb_mode=parameters['rggb_mode'],
                       amp=parameters['amp'], return_position_info=enable_inputB, offsets = offsets, low_res = parameters['res'],
                       unprocess_high_res=parameters['unprocess_high_res'],enable_random_gains=parameters['enable_random_gains'],
-                    rggb_teacher=parameters['baseline_rggb_mode'], central_squeeze_and_pad_factor=parameters['central_squeeze_and_pad_factor'],varying_max_amp=parameters['varying_max_amp'])
+                    rggb_teacher=parameters['baseline_rggb_mode'], central_squeeze_and_pad_factor=parameters['central_squeeze_and_pad_factor'],varying_max_amp=parameters['varying_max_amp'],
+                     image_h=parameters['image_h'],image_w=parameters['image_w'])
 
 print('preparing generators')
 
-val_generator_baseline = get_dataset(parameters['dataset_dir'], 'validation', batch_size, preprocessing=parameters['preprocessing'],rggb_mode=parameters['baseline_rggb_mode'],
+val_generator_baseline = get_dataset(parameters['dataset_dir'], 'validation', batch_size, image_h = parameters['image_h'],image_w = parameters['image_w'],
+                                     preprocessing=parameters['preprocessing'],rggb_mode=parameters['baseline_rggb_mode'],
                                      central_squeeze_and_pad_factor=parameters['central_squeeze_and_pad_factor'])
 
 # generator for the feature learning

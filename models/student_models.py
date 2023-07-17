@@ -238,6 +238,10 @@ def full_size_rggb_fe(
             res=224,
             channels=4,
             metrics=[],
+            teacher_net=None,
+            teacher_only_mode=False,
+            teacher_net_initial_weight=0.9,
+            teacher_preprsocessing=None,
              **kwargs):
     if referfence_model== 'keras_resnet50':
         teacher = tf.keras.applications.resnet.ResNet50(input_shape=(224, 224, 3),
@@ -272,9 +276,28 @@ def full_size_rggb_fe(
     fe_be_model._name="fe_be_model"
     input = keras.layers.Input(shape=(1, res//2, res//2,channels)) # first singelton dimension for compatibility with DRC inputs
     x = keras.layers.Reshape(target_shape=(res//2, res//2,channels))(input)
+
+    if teacher_net is not None:
+        teacher_net.trainable = False
+        # teacher_input_at_low_res = tf.math.reduce_mean(inputA, axis=1)
+        # if rggb_ext_type > 0:
+        # tmp_
+        teacher_input_at_rgb = upsample_rggb(x, upsample_factor=1, preprocessing=teacher_preprsocessing)
+        # else:
+        # teacher_input_at_low_res = upsample_and_reprocess(teacher_input_at_low_res, preprocessing=teacher_preprsocessing)
+        teacher_out_features= teacher_net(teacher_input_at_rgb)
+
     x = keras.layers.Conv2D(conv_conf['filters'], kernel_size=conv_conf['kernel_size'], strides=conv_conf['strides'],
                             padding='same')(x) #todo - generalize
     x = fe_be_model(x)
+    if teacher_net is not None:
+        if not teacher_only_mode:
+            c1 = tf.Variable(1.-teacher_net_initial_weight)
+            c2 = tf.Variable(teacher_net_initial_weight)
+            x = c1*x + c2*teacher_out_features
+        else:
+            x = teacher_out_features
+
     model = keras.models.Model(inputs=input,outputs=x, name = 'student_model')
     opt=tf.keras.optimizers.Adam(lr=1e-3)
     del be_model,fe_fe_model

@@ -61,6 +61,21 @@ def rescale(x,enforce_def=False,preprocessing='default',**kwargs):
         x = tf.keras.applications.vgg19.preprocess_input(x)
         print(
             'debug ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssVGG16')
+    elif preprocessing == 'alex_net':
+        channels = tf.unstack(x, axis=-1)
+        x = tf.stack([channels[2], channels[1], channels[0]], axis=-1)
+        x = x - tf.reshape(tf.reduce_mean(x, axis=[-2, -3]), [1, 1, 3])
+        x = tf.cast(x * (256.), tf.float32)
+        print(
+            'debug ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssAlexNet')
+    elif preprocessing == 'alex_net2':
+        raise NotImplementedError
+        # channels = tf.unstack(x, axis=-1)
+        # x = tf.stack([channels[2], channels[1], channels[0]], axis=-1)
+        # x = x  - tf.reshape(tf.reduce_mean(x,axis=[-2,-3]),[1,1,3])
+        # x = tf.cast(x * (256.), tf.float32)
+        # print(
+        #     'debug ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssAlexNet')
     elif preprocessing == 'default':
         x = tf.subtract(x, 0.5)
         x = tf.multiply(x, 2.0)

@@ -16,6 +16,8 @@ def squeeze_list(x):
 
 
 def extract_top_model(source_model, last_bottom_layer_name,silent=True,custom_objects=None):
+    DUMMY_INSTANCE = 999
+
     layers_by_output_tensor_name = {}
     for layer in source_model.layers:
         if not silent:
@@ -34,6 +36,9 @@ def extract_top_model(source_model, last_bottom_layer_name,silent=True,custom_ob
     input_top = keras.layers.Input(shape=last_bottom_layer.output.shape.as_list()[1:],
                                    name='input_top')
 
+    # taking care of a case that input layer was not defined as a keras layer explicitly
+    layers_by_output_tensor_name[source_model.layers[0].output.name]['output_tensor_instance'] = DUMMY_INSTANCE
+    # the connection between layers in now broken at the input layer of the new model
     layers_by_output_tensor_name[last_bottom_layer.output.name]['output_tensor_instance'] = input_top
 
     for ii in range(len(layers_by_output_tensor_name)):
@@ -48,8 +53,9 @@ def extract_top_model(source_model, last_bottom_layer_name,silent=True,custom_ob
                 if not not_ready_yet:
                     inputs = [layers_by_output_tensor_name[input_tensor]['output_tensor_instance'] for input_tensor in
                               layers_by_output_tensor_name[tensor_name]['input_tensor_names']]
-                    layers_by_output_tensor_name[tensor_name]['output_tensor_instance'] = \
-                        layers_by_output_tensor_name[tensor_name]['layer_instance'](squeeze_list(inputs))
+                    if squeeze_list(inputs) is not DUMMY_INSTANCE:
+                        layers_by_output_tensor_name[tensor_name]['output_tensor_instance'] = \
+                            layers_by_output_tensor_name[tensor_name]['layer_instance'](squeeze_list(inputs))
                     if not silent:
                         print('connected layer:', layers_by_output_tensor_name[tensor_name]['name'])
 
